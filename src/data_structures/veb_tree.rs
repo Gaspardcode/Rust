@@ -58,7 +58,7 @@ impl VebTree {
         self.max
     }
 
-    pub fn iter(&self) -> VebTreeIter {
+    pub fn iter(&self) -> VebTreeIter<'_> {
         VebTreeIter::new(self)
     }
 
@@ -221,7 +221,7 @@ impl<'a> VebTreeIter<'a> {
     }
 }
 
-impl<'a> Iterator for VebTreeIter<'a> {
+impl Iterator for VebTreeIter<'_> {
     type Item = u32;
 
     fn next(&mut self) -> Option<u32> {
@@ -235,7 +235,7 @@ impl<'a> Iterator for VebTreeIter<'a> {
 #[cfg(test)]
 mod test {
     use super::VebTree;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, RngExt, SeedableRng};
 
     fn test_veb_tree(size: u32, mut elements: Vec<u32>, exclude: Vec<u32>) {
         // Insert elements

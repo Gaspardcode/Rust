@@ -1,4 +1,6 @@
-use rand::Rng;
+#[cfg(test)]
+use rand::RngExt;
+#[cfg(test)]
 use std::time::Instant;
 
 #[cfg(test)]
