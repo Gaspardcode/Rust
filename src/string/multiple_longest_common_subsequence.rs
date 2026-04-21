@@ -1,6 +1,25 @@
 use std::cmp::max;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BinaryHeap, HashMap};
+
+#[derive(Clone, Eq, PartialEq)]
+struct QueueNode {
+    point: Vec<Option<usize>>,
+    f: u64,
+    h: u64,
+}
+
+impl Ord for QueueNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.f.cmp(&other.f).then_with(|| self.h.cmp(&other.h))
+    }
+}
+
+impl PartialOrd for QueueNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 // alphabet : the common alphabet
 // chains : the strings among which the common subsequence is
@@ -181,29 +200,21 @@ impl Context {
     ///
     /// * `self' - A structure containing informations
     /// * 'queue' - The priority queue of points  
-    fn init_queue(&mut self) -> Vec<Vec<Option<usize>>> {
-        let mut queue = self.get_starting_p();
-
-        for q in queue.clone() {
+    fn init_queue(&mut self) -> BinaryHeap<QueueNode> {
+        let mut queue = BinaryHeap::new();
+        for q in self.get_starting_p() {
             self.update_suc(vec![None; self.d], q.clone());
+            queue.push(self.node_from_point(q));
         }
-
-        self.reorder_queue(&mut queue);
-
         queue
     }
 
-    // sorts the queue
-    fn reorder_queue(&self, queue: &mut [Vec<Option<usize>>]) {
-        queue.sort_unstable_by(|p, q| {
-            if (self.f.get(p) > self.f.get(q))
-                || (self.f.get(p) == self.f.get(q) && self.heuristic(p) > self.heuristic(q))
-            {
-                Ordering::Greater
-            } else {
-                Ordering::Less
-            }
-        });
+    fn node_from_point(&self, point: Vec<Option<usize>>) -> QueueNode {
+        QueueNode {
+            f: self.f[&point],
+            h: self.heuristic(&point),
+            point,
+        }
     }
 }
 
@@ -310,50 +321,50 @@ fn mt_table(chains: &Vec<Vec<char>>, alphabet: &mut Vec<char>) -> Vec<Vec<Vec<Op
 /// * `String' if no LCS was found
 pub fn multiple_longest_common_subsequence(chains: &Vec<&str>) -> String {
     const C: u64 = 20;
-
-    // Preprocessing
     let mut ctx = Context::new(chains);
-
-    // queue
-    let mut queue: Vec<Vec<Option<usize>>> = ctx.init_queue();
+    let mut queue: BinaryHeap<QueueNode> = ctx.init_queue();
 
     while !queue.is_empty() {
-        // y = max( {f(p) | p in queue} )
-        let mut y = ctx.f[queue.last().unwrap()];
-
-        // y = y - c // without overflow
+        let mut y = queue.peek().map_or(0, |node| node.f);
         if y > C {
             y -= C;
         }
+        let current_layer = collect_layer(&mut queue, y);
+        let mut next_points: Vec<Vec<Option<usize>>> = Vec::new();
 
-        // R = { p | p in queue and y <= f(p) }
-        let second_queue = queue
-            .clone()
-            .into_iter()
-            .filter(|p| y <= ctx.f[p])
-            .collect::<Vec<Vec<Option<usize>>>>();
-        queue.clear();
-
-        for p in second_queue {
+        for node in current_layer {
+            let p = node.point;
             if ctx.heuristic(&p) == 0 {
-                // An MLCS match was found
                 return ctx.common_seq(&p);
             }
-            // inserting all succesors in the queue
-            let succs = ctx.get_successors(&p);
-            for q in succs {
-                // basically saying if the queue queue does not already
-                // contain the point q
-                if !queue.contains(&q) {
+            for q in ctx.get_successors(&p) {
+                if !next_points.contains(&q) {
                     ctx.update_suc(p.clone(), q.clone());
-                    queue.push(q);
+                    next_points.push(q);
                 }
             }
         }
-        // sorting the queue
-        ctx.reorder_queue(&mut queue);
+        queue = next_points
+            .into_iter()
+            .map(|point| ctx.node_from_point(point))
+            .collect();
     }
     String::from("")
+}
+
+fn collect_layer(queue: &mut BinaryHeap<QueueNode>, threshold: u64) -> Vec<QueueNode> {
+    let mut nodes = Vec::new();
+    while let Some(node) = queue.pop() {
+        nodes.push(node);
+    }
+    nodes.sort_unstable_by(|a, b| {
+        if (a.f > b.f) || (a.f == b.f && a.h > b.h) {
+            Ordering::Greater
+        } else {
+            Ordering::Less
+        }
+    });
+    nodes.into_iter().filter(|node| node.f >= threshold).collect()
 }
 
 /// Computes the suffix table
